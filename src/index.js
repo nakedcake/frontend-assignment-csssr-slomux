@@ -1,3 +1,5 @@
+import React, { useEffect } from "react";
+import ReactDom from "react-dom";
 // Slomux - реализация Flux, в которой, как следует из названия, что-то сломано.
 // Нужно починить то, что сломано, и подготовить Slomux к использованию на больших проектах, где крайне важна производительность
 
@@ -13,51 +15,62 @@ const createStore = (reducer, initialState) => {
     listeners.forEach(listener => listener())
   }
 
-  const subscribe = listener => listeners.push(listener)
+  const subscribe = listener => {
+    listeners.push(listener)
+
+    return () => {
+      const index = listeners.indexOf(listener)
+      listeners.splice(index, 1)
+    }
+  }
 
   return { getState, dispatch, subscribe }
 }
 
+const useStore = () => {
+  const { store } = React.useContext(Context)
+
+  return store
+}
+
 const useSelector = selector => {
-  const ctx = React.useContext(React.createContext(null))
-  if (!ctx) {
-    return 0
-  }
+  const { getState, subscribe } = useStore()
 
-  return selector(ctx.store.getState()) 
+  const [state, setState] = React.useState(getState())
+
+  useEffect(() => subscribe(() => setState(getState())), [subscribe])
+
+  return selector(state)
 }
+
 const useDispatch = () => {
-  const ctx = React.useContext(React.createContext(null))
-  if (!ctx) {
-    return () => {}
-  }
+  const { dispatch } = useStore()
 
-  return ctx.store.dispatch
+  return dispatch
 }
 
-const Provider = ({ store, context, children }) => {
-  const Context = context || React.createContext(null) 
+const Context = React.createContext(null)
 
+const Provider = ({ store, children }) => {
   return <Context.Provider value={{ store }}>{children}</Context.Provider>
 }
 
 // APP
 
 // actions
-const UPDATE_COUNTER = 'UPDATE_COUNTER'
-const CHANGE_STEP_SIZE = 'CHANGE_STEP_SIZE'
+const UPDATE_COUNTER = "UPDATE_COUNTER"
+const CHANGE_STEP_SIZE = "CHANGE_STEP_SIZE"
 
 // action creators
-const updateCounter = value => ({
+const updateCounter = payload => ({
   type: UPDATE_COUNTER,
-  payload: value,
+  payload,
 })
 
-const changeStepSize = value => ({
+const changeStepSize = payload => ({
   type: CHANGE_STEP_SIZE,
-  payload: value,
+  payload,
 })
-
 
 // reducers
 const defaultState = {
@@ -66,13 +79,16 @@ const defaultState = {
 }
 
 const reducer = (state = defaultState, action) => {
-  switch(action.type) {
+  switch (action.type) {
     case UPDATE_COUNTER:
-      state.counter += action.payload
+      return {
+        ...state,
+        counter: state.counter + action.payload * state.stepSize,
+      };
     case CHANGE_STEP_SIZE:
-      state.stepSize = action.payload
+      return { ...state, stepSize: action.payload }
     default:
-      {}
+      return state
   }
 }
 
@@ -91,12 +107,15 @@ const Counter = () => {
 }
 
 const Step = () => {
-  const stepSize = useSelector(state => state.stepSize, (current, prev) => current === prev)
+  const stepSize = useSelector(state => state.stepSize)
   const dispatch = useDispatch()
 
   return (
     <div>
-      <div>Значение счётчика должно увеличиваться или уменьшаться на заданную величину шага</div>
+      <div>
+        Значение счётчика должно увеличиваться или уменьшаться на заданную
+        величину шага
+      </div>
       <div>Текущая величина шага: {stepSize}</div>
       <input
         type="range"
@@ -109,10 +128,10 @@ const Step = () => {
   )
 }
 
-ReactDOM.render(
+ReactDom.render(
   <Provider store={createStore(reducer, defaultState)}>
-      <Step />
-      <Counter />
+    <Step />
+    <Counter />
   </Provider>,
-  document.getElementById('app')
+  document.getElementById("app")
 )
